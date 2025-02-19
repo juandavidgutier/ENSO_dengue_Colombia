@@ -10,9 +10,9 @@ library(caret)
 
 
 #################################################################################
-#episodios
+#episodes
 #implied Conditional Independencies
-dataset <- read.csv("D:/clases/UDES/articulo dengue/ltmle/ci/data_DAG.csv")
+dataset <- read.csv("D:/data_DAG.csv")
 str(dataset)
 dataset <- select(dataset, excess, S3, S4, S34, S12, ESOI, SOI, 
                   NATL,	SATL, TROP, UBN, Temp, Rain, 
@@ -44,8 +44,6 @@ hc = sort(hc)
 reduced_Data = dataset[,-c(hc)]
 str (reduced_Data)
 
-
-#OJO OJO PARA SOLO CASOS COMPLETOS
 reduced_Data <- reduced_Data[complete.cases(reduced_Data), ] 
 str(reduced_Data)
 
@@ -164,11 +162,11 @@ det(myCov) < 0
 any(eigen(myCov)$values < 0)
 
 
-## Independencias condicionales
+## Conditional independences
 impliedConditionalIndependencies(dag)
 corr <- lavCor(reduced_Data) #, missing = "listwise")
 
-#plot con ci convencinales (método analitico)
+# Plot
 localTests(dag, sample.cov=corr, sample.nobs=nrow(reduced_Data))
 plotLocalTestResults(localTests(dag, sample.cov=corr, sample.nobs=nrow(reduced_Data)), xlim=c(-1,1))
 
@@ -203,25 +201,15 @@ simple_dag <- dagify(
 
 
 
-# theme_dag() coloca la trama en un fondo blanco sin etiquetas en los ejes
+# theme_dag() 
 ggdag(simple_dag) + 
   theme_dag()
 
 ggdag_status(simple_dag) +
   theme_dag()
 
-
-#paths
-#paths(simple_dag)
-
-#ggdag_paths(simple_dag) +
-#  theme_dag()
-
-#adjusting
+# adjusting
 adjustmentSets(simple_dag,  type = "minimal")
-## {z_miseria, indixes}
-
-
 ggdag_adjustment_set(simple_dag, shadow = TRUE) +
   theme_dag()
 

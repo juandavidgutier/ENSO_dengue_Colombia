@@ -4,7 +4,7 @@ library(ggplot2)
 
 
 #read dataset
-data_all <- read.csv("D:/clases/UDES/articulo dengue/ltmle/ci/data_DAG.csv")
+data_all <- read.csv("D:/data_DAG.csv")
 data_all <- select(data_all, DANE, excess, S3, S4, S34, SOI, NATL, TROP, 
                    UBN, Temp, Rain, invest_health, Pop_density, 
                    NeutralvsLaNina) #change it to "NeutralvsElNino" and "LaNinavsElNino"
