@@ -1,15 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 25 19:04:08 2021
-
-@author: juand
-"""
-
 #version modules
-#dowhy==0.10
-#econml==0.14
+#dowhy==0.11.1
+#econml==0.15.1
 
 
+# importing required libraries
 # importing required libraries
 import os, warnings, random
 import dowhy
@@ -18,10 +12,11 @@ from dowhy import CausalModel
 import pandas as pd
 import numpy as np
 np.int = np.int32
-from econml.dml import SparseLinearDML, DML
+from econml.dml import DML, SparseLinearDML
+from econml.dr import SparseLinearDRLearner
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LassoCV
+from sklearn.model_selection import train_split
 from zepid.graphics import EffectMeasurePlot
 import matplotlib.pyplot as plt
 import scipy.stats as stats
@@ -30,7 +25,6 @@ from itertools import product
 from econml.utilities import WeightedModelWrapper
 from plotnine import ggplot, aes, geom_line, geom_ribbon, ggtitle, labs, geom_point, geom_hline, theme_linedraw, theme, element_rect, theme_light, element_line, element_text, geom_errorbarh, geom_vline, theme_bw, element_blank
 from xgboost import XGBRegressor, XGBClassifier
-
 
 
 # Set seeds to make the results more reproducible
@@ -103,27 +97,24 @@ W = data_NeutralvsLa_Nina[['SST3', 'SST4', 'SST34',
                                       'SOI', 'NATL', 'TROP']].to_numpy().reshape(-1, 6)
 X = data_NeutralvsLa_Nina[['Pop_density']].to_numpy()
 
-X_train, X_test, T_train, T_test, Y_train, Y_test, W_train, W_test = train_test_split(X, T, Y, W, test_size=.2)
-
-
 #Estimation of the effect 
-estimate_NeutralvsLa_Nina = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+estimate_NeutralvsLa_Nina = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
 estimate_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.dowhy
 
 # fit the model
-estimate_NeutralvsLa_Nina.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto') 
+estimate_NeutralvsLa_Nina.fit(Y=Y, T=T, X=X, W=W, inference='auto') 
 
 # predict effect for each sample X
-estimate_NeutralvsLa_Nina.effect(X_test)
+estimate_NeutralvsLa_Nina.effect(X)
 
 # ATE
-ate_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.ate(X_test) 
+ate_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.ate(X) 
 print(ate_NeutralvsLa_Nina) 
 
 # confidence interval of ate
-ci_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.ate_interval(X_test) 
+ci_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.ate_interval(X) 
 print(ci_NeutralvsLa_Nina) 
 
 # Set values in the df_ATE
@@ -139,18 +130,18 @@ print(df_ATE)
 min_X = min(X)
 max_X = max(X)
 delta = (max_X - min_X) / 100
-X_test_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
+X_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
 
-est2_NeutralvsLa_Nina = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+est2_NeutralvsLa_Nina = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
-est2_NeutralvsLa_Nina.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto')
+est2_NeutralvsLa_Nina.fit(Y=Y, T=T, X=X, W=W, inference='auto')
 
-treatment_cont_marg = est2_NeutralvsLa_Nina.const_marginal_effect(X_test_pop)
-hte_lower2_cons, hte_upper2_cons = est2_NeutralvsLa_Nina.const_marginal_effect_interval(X_test_pop)
+treatment_cont_marg = est2_NeutralvsLa_Nina.const_marginal_effect(X_pop)
+hte_lower2_cons, hte_upper2_cons = est2_NeutralvsLa_Nina.const_marginal_effect_interval(X_pop)
 
-# Reshape X_test to 1-dimensional array
-X_test_pop = X_test_pop.ravel()
+# Reshape X to 1-dimensional array
+X_pop = X_pop.ravel()
 treatment_cont_marg = treatment_cont_marg.ravel()
 
 # Reshape te_lower2_cons and te_upper2_cons to 1-dimensional arrays
@@ -160,7 +151,7 @@ hte_upper2_cons = hte_upper2_cons.ravel()
 #Figure 4a
 (
 ggplot()
-  + aes(x=X_test_pop, y=treatment_cont_marg)
+  + aes(x=X_pop, y=treatment_cont_marg)
   + geom_line()
   + geom_ribbon(aes(ymin = hte_lower2_cons, ymax = hte_upper2_cons), alpha=0.1)
   + labs(x='Population density (sd)', y='Effect of Neutral vs La Niña on excess dengue cases')
@@ -198,6 +189,10 @@ NeutralvsLa_Nina_dane.to_csv('D:/Density_NeutralvsLa_Nina_dane.csv', index=False
 random_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.refute_estimate(method_name="random_common_cause", random_state=123, num_simulations=20)
 print(random_NeutralvsLa_Nina)
 
+#with replace a random subset of the data
+subset_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.refute_estimate(method_name="data_subset_refuter", subset_fraction=0.10, num_simulations=20)
+print(subset_NeutralvsLa_Nina)
+
 #with replace a dummy outcome
 dummy_NeutralvsLa_Nina = estimate_NeutralvsLa_Nina.refute_estimate(method_name="dummy_outcome_refuter", num_simulations=20)
 print(dummy_NeutralvsLa_Nina[0])
@@ -221,32 +216,29 @@ W = data_NeutralvsEl_Nino[['SST3', 'SST4', 'SST34',
                                       'SOI', 'NATL', 'TROP']].to_numpy().reshape(-1, 6)
 X = data_NeutralvsEl_Nino[['Pop_density']].to_numpy()
 
-X_train, X_test, T_train, T_test, Y_train, Y_test, W_train, W_test = train_test_split(X, T, Y, W, test_size=.2)
-
-
 #Estimation of the effect 
-estimate_NeutralvsEl_Nino = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+estimate_NeutralvsEl_Nino = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
 estimate_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.dowhy
 
 # fit the model
-estimate_NeutralvsEl_Nino.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto') 
+estimate_NeutralvsEl_Nino.fit(Y=Y, T=T, X=X, W=W, inference='auto') 
 
 # predict effect for each sample X
-estimate_NeutralvsEl_Nino.effect(X_test)
+estimate_NeutralvsEl_Nino.effect(X)
 
 # ATE
-ate_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.ate(X_test) 
+ate_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.ate(X) 
 print(ate_NeutralvsEl_Nino) 
 
 # confidence interval of ate
-ci_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.ate_interval(X_test) 
+ci_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.ate_interval(X) 
 print(ci_NeutralvsEl_Nino) 
 
 # Set values in the df_ATE
-df_ATE.at[0, 'ATE'] = round(ate_NeutralvsEl_Nino, 5)
-df_ATE.at[0, '95% CI'] = ci_NeutralvsEl_Nino
+df_ATE.at[1, 'ATE'] = round(ate_NeutralvsEl_Nino, 5)
+df_ATE.at[1, '95% CI'] = ci_NeutralvsEl_Nino
 print(df_ATE)
 
 
@@ -257,28 +249,28 @@ print(df_ATE)
 min_X = min(X)
 max_X = max(X)
 delta = (max_X - min_X) / 100
-X_test_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
+X_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
 
-est2_NeutralvsEl_Nino = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+est2_NeutralvsEl_Nino = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
-est2_NeutralvsEl_Nino.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto')
+est2_NeutralvsEl_Nino.fit(Y=Y, T=T, X=X, W=W, inference='auto')
 
-treatment_cont_marg = est2_NeutralvsEl_Nino.const_marginal_effect(X_test_pop)
-hte_lower2_cons, hte_upper2_cons = est2_NeutralvsEl_Nino.const_marginal_effect_interval(X_test_pop)
+treatment_cont_marg = est2_NeutralvsEl_Nino.const_marginal_effect(X_pop)
+hte_lower2_cons, hte_upper2_cons = est2_NeutralvsEl_Nino.const_marginal_effect_interval(X_pop)
 
-# Reshape X_test to 1-dimensional array
-X_test_pop = X_test_pop.ravel()
+# Reshape X to 1-dimensional array
+X_pop = X_pop.ravel()
 treatment_cont_marg = treatment_cont_marg.ravel()
 
 # Reshape te_lower2_cons and te_upper2_cons to 1-dimensional arrays
 hte_lower2_cons = hte_lower2_cons.ravel()
 hte_upper2_cons = hte_upper2_cons.ravel()
 
-#Figure 4a
+#Figure 4b
 (
 ggplot()
-  + aes(x=X_test_pop, y=treatment_cont_marg)
+  + aes(x=X_pop, y=treatment_cont_marg)
   + geom_line()
   + geom_ribbon(aes(ymin = hte_lower2_cons, ymax = hte_upper2_cons), alpha=0.1)
   + labs(x='Population density (sd)', y='Effect of Neutral vs El Niño on excess dengue cases')
@@ -316,6 +308,10 @@ NeutralvsEl_Nino_dane.to_csv('D:/Density_NeutralvsEl_Nino_dane.csv', index=False
 random_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.refute_estimate(method_name="random_common_cause", random_state=123, num_simulations=20)
 print(random_NeutralvsEl_Nino)
 
+#with replace a random subset of the data
+subset_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.refute_estimate(method_name="data_subset_refuter", subset_fraction=0.10, num_simulations=20)
+print(subset_NeutralvsEl_Nino)
+
 #with replace a dummy outcome
 dummy_NeutralvsEl_Nino = estimate_NeutralvsEl_Nino.refute_estimate(method_name="dummy_outcome_refuter", num_simulations=20)
 print(dummy_NeutralvsEl_Nino[0])
@@ -340,32 +336,29 @@ W = data_La_NinavsEl_Nino[['SST3', 'SST4', 'SST34',
                                       'SOI', 'NATL', 'TROP']].to_numpy().reshape(-1, 6)
 X = data_La_NinavsEl_Nino[['Pop_density']].to_numpy()
 
-X_train, X_test, T_train, T_test, Y_train, Y_test, W_train, W_test = train_test_split(X, T, Y, W, test_size=.2)
-
-
 #Estimation of the effect 
-estimate_La_NinavsEl_Nino = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+estimate_La_NinavsEl_Nino = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
 estimate_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.dowhy
 
 # fit the model
-estimate_La_NinavsEl_Nino.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto') 
+estimate_La_NinavsEl_Nino.fit(Y=Y, T=T, X=X, W=W, inference='auto') 
 
 # predict effect for each sample X
-estimate_La_NinavsEl_Nino.effect(X_test)
+estimate_La_NinavsEl_Nino.effect(X)
 
 # ATE
-ate_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.ate(X_test) 
+ate_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.ate(X) 
 print(ate_La_NinavsEl_Nino) 
 
 # confidence interval of ate
-ci_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.ate_interval(X_test) 
+ci_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.ate_interval(X) 
 print(ci_La_NinavsEl_Nino) 
 
 # Set values in the df_ATE
-df_ATE.at[0, 'ATE'] = round(ate_La_NinavsEl_Nino, 5)
-df_ATE.at[0, '95% CI'] = ci_La_NinavsEl_Nino
+df_ATE.at[2, 'ATE'] = round(ate_La_NinavsEl_Nino, 5)
+df_ATE.at[2, '95% CI'] = ci_La_NinavsEl_Nino
 print(df_ATE)
 
 
@@ -376,28 +369,28 @@ print(df_ATE)
 min_X = min(X)
 max_X = max(X)
 delta = (max_X - min_X) / 100
-X_test_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
+X_pop = np.arange(min_X, max_X + delta - 0.001, delta).reshape(-1, 1)
 
-est2_La_NinavsEl_Nino = SparseLinearDML(featurizer=PolynomialFeatures(degree=3, include_bias=False),  
-                                                   discrete_treatment=True, cv=5, random_state=123)
+est2_La_NinavsEl_Nino = SparseLinearDRLearner(featurizer=PolynomialFeatures(degree=3, include_bias=False),   
+                                                   cv=5, random_state=123)
 
-est2_La_NinavsEl_Nino.fit(Y=Y_train, T=T_train, X=X_train, W=W_train, inference='auto')
+est2_La_NinavsEl_Nino.fit(Y=Y, T=T, X=X, W=W, inference='auto')
 
-treatment_cont_marg = est2_La_NinavsEl_Nino.const_marginal_effect(X_test_pop)
-hte_lower2_cons, hte_upper2_cons = est2_La_NinavsEl_Nino.const_marginal_effect_interval(X_test_pop)
+treatment_cont_marg = est2_La_NinavsEl_Nino.const_marginal_effect(X_pop)
+hte_lower2_cons, hte_upper2_cons = est2_La_NinavsEl_Nino.const_marginal_effect_interval(X_pop)
 
-# Reshape X_test to 1-dimensional array
-X_test_pop = X_test_pop.ravel()
+# Reshape X to 1-dimensional array
+X_pop = X_pop.ravel()
 treatment_cont_marg = treatment_cont_marg.ravel()
 
 # Reshape te_lower2_cons and te_upper2_cons to 1-dimensional arrays
 hte_lower2_cons = hte_lower2_cons.ravel()
 hte_upper2_cons = hte_upper2_cons.ravel()
 
-#Figure 4a
+#Figure 4c
 (
 ggplot()
-  + aes(x=X_test_pop, y=treatment_cont_marg)
+  + aes(x=X_pop, y=treatment_cont_marg)
   + geom_line()
   + geom_ribbon(aes(ymin = hte_lower2_cons, ymax = hte_upper2_cons), alpha=0.1)
   + labs(x='Population density (sd)', y='Effect of La Niña vs El Niño on excess dengue cases')
@@ -434,6 +427,10 @@ La_NinavsEl_Nino_dane.to_csv('D:/Density_La_NinavsEl_Nino_dane.csv', index=False
 #with random common cause
 random_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.refute_estimate(method_name="random_common_cause", random_state=123, num_simulations=20)
 print(random_La_NinavsEl_Nino)
+
+#with replace a random subset of the data
+subset_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.refute_estimate(method_name="data_subset_refuter", subset_fraction=0.10, num_simulations=20)
+print(subset_La_NinavsEl_Nino)
 
 #with replace a dummy outcome
 dummy_La_NinavsEl_Nino = estimate_La_NinavsEl_Nino.refute_estimate(method_name="dummy_outcome_refuter", num_simulations=20)
@@ -481,7 +478,7 @@ p = EffectMeasurePlot(label=df_plot.Labels, effect_measure=df_plot.ATE, lcl=df_p
 p.labels(center=0)
 p.colors(pointcolor='r' , pointshape="s", linecolor='b')
 p.labels(effectmeasure='ATE')  
-p.plot(figsize=(10, 5), t_adjuster=0.10, max_value=0.2, min_value=-0.2)
+p.plot(figsize=(10, 5), t_adjuster=0.10, max_value=0.1, min_value=-0.1)
 plt.tight_layout()
 plt.show()
 
